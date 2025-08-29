@@ -5,7 +5,8 @@ const App: React.FC = () => {
   const [transcript, setTranscript] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const handleMicClick = async () => {
@@ -29,77 +30,58 @@ const App: React.FC = () => {
           },
         });
 
+        streamRef.current = stream;
+
         const audioContext = new (window.AudioContext ||
           (window as any).webkitAudioContext)();
 
-        const contextSampleRate = audioContext.sampleRate;
-        console.log("AudioContext sample rate:", contextSampleRate);
-
-        const source = audioContext.createMediaStreamSource(stream);
-        let processingNode: ScriptProcessorNode;
-
-        if (contextSampleRate !== 16000) {
-          const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-          processor.onaudioprocess = (event) => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              const inputData = event.inputBuffer.getChannelData(0);
-              const downsampleRatio = contextSampleRate / 16000;
-              const outputLength = Math.floor(
-                inputData.length / downsampleRatio
-              );
-              const outputData = new Float32Array(outputLength);
-
-              for (let i = 0; i < outputLength; i++) {
-                const sourceIndex = Math.floor(i * downsampleRatio);
-                outputData[i] = inputData[sourceIndex];
-              }
-
-              wsRef.current.send(outputData.buffer);
-            }
-          };
-
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-          processingNode = processor;
-        } else {
-          const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-          processor.onaudioprocess = (event) => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              const audioData = event.inputBuffer.getChannelData(0);
-              const buffer = new Float32Array(audioData);
-              wsRef.current.send(buffer.buffer);
-            }
-          };
-
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-          processingNode = processor;
-        }
-
         audioContextRef.current = audioContext;
-        audioProcessorRef.current = processingNode;
-        streamRef.current = stream;
+        const source = audioContext.createMediaStreamSource(stream);
+        sourceNodeRef.current = source;
+
+        await audioContext.audioWorklet.addModule("/audio-processor.js");
+        const workletNode = new AudioWorkletNode(
+          audioContext,
+          "audio-downsample-processor"
+        );
+        audioWorkletNodeRef.current = workletNode;
+
+        workletNode.port.onmessage = (event) => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(event.data);
+          }
+        };
+        sourceNodeRef.current.connect(workletNode);
+        // workletNode.connect(audioContext.destination);
+
         setIsRecording(true);
       } catch (error) {
         console.error("Error accessing microphone:", error);
       }
     } else {
       // Stop recording
-      if (audioProcessorRef.current) {
-        audioProcessorRef.current.disconnect();
-        audioProcessorRef.current = null;
+
+      if (sourceNodeRef.current && audioWorkletNodeRef.current) {
+        sourceNodeRef.current.disconnect(audioWorkletNodeRef.current);
+        sourceNodeRef.current = null;
       }
 
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
+      if (audioWorkletNodeRef.current) {
+        audioWorkletNodeRef.current.port.close();
+        audioWorkletNodeRef.current.disconnect();
+        audioWorkletNodeRef.current = null;
       }
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
+      }
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== "closed"
+      ) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
       }
 
       wsRef.current?.close();

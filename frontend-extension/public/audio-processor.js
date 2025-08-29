@@ -1,32 +1,31 @@
-class AudioProcessor extends AudioWorkletProcessor {
-  constructor() {
+// audio-processor.js
+class AudioDownsampleProcessor extends AudioWorkletProcessor {
+  constructor(options) {
     super();
-    this.bufferSize = 4096;
-    this.buffer = new Float32Array(this.bufferSize);
-    this.bufferIndex = 0;
+    this.port.onmessage = (event) => {};
   }
 
   process(inputs, outputs, parameters) {
     const input = inputs[0];
+    const output = outputs[0];
 
     if (input.length > 0) {
-      const inputChannel = input[0]; // Get first (mono) channel
+      const inputData = input[0];
+      // Simple downsampling by taking every Nth sample.
+      // A more advanced implementation might use interpolation for better quality.
+      const downsampleRatio = sampleRate / 16000;
+      const outputLength = Math.floor(inputData.length / downsampleRatio);
+      const outputData = new Float32Array(outputLength);
 
-      for (let i = 0; i < inputChannel.length; i++) {
-        this.buffer[this.bufferIndex] = inputChannel[i];
-        this.bufferIndex++;
-
-        // Send buffer when full
-        if (this.bufferIndex >= this.bufferSize) {
-          // Send copy of buffer to main thread
-          this.port.postMessage(new Float32Array(this.buffer));
-          this.bufferIndex = 0;
-        }
+      for (let i = 0; i < outputLength; i++) {
+        const sourceIndex = Math.floor(i * downsampleRatio);
+        outputData[i] = inputData[sourceIndex];
       }
+      this.port.postMessage(outputData.buffer);
     }
 
-    return true; // Keep processor alive
+    return true;
   }
 }
 
-registerProcessor("audio-processor", AudioProcessor);
+registerProcessor("audio-downsample-processor", AudioDownsampleProcessor);
