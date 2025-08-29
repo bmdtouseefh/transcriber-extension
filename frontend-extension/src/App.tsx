@@ -22,12 +22,7 @@ const App: React.FC = () => {
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true, //{
-          //   channelCount: 1,
-          //   echoCancellation: true,
-          //   noiseSuppression: true,
-          //   autoGainControl: true,
-          // },
+          audio: true,
         });
 
         streamRef.current = stream;
