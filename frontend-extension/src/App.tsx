@@ -22,12 +22,12 @@ const App: React.FC = () => {
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
+          audio: true, //{
+          //   channelCount: 1,
+          //   echoCancellation: true,
+          //   noiseSuppression: true,
+          //   autoGainControl: true,
+          // },
         });
 
         streamRef.current = stream;
@@ -56,7 +56,30 @@ const App: React.FC = () => {
 
         setIsRecording(true);
       } catch (error) {
-        console.error("Error accessing microphone:", error);
+        if (error instanceof DOMException) {
+          console.error(
+            "Error accessing microphone:",
+            error.name,
+            "-",
+            error.message
+          );
+          // You can now handle specific errors
+          if (error.name === "NotAllowedError") {
+            alert(
+              "Microphone permission was denied. Please allow microphone access in your browser settings."
+            );
+          } else if (error.name === "NotFoundError") {
+            alert(
+              "No microphone was found. Please ensure a microphone is connected and enabled."
+            );
+          } else {
+            alert(
+              `An error occurred while accessing the microphone: ${error.name}`
+            );
+          }
+        } else {
+          console.error("An unexpected error occurred:", error);
+        }
       }
     } else {
       // Stop recording
