@@ -9,6 +9,27 @@ const App: React.FC = () => {
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const requestMicPermission = () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      const tab = tabs[0];
+      if (tab && tab.id) {
+        if (
+          tab.url &&
+          (tab.url.startsWith("http") || tab.url.startsWith("https"))
+        ) {
+          chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["micRequest.js"],
+          });
+        } else {
+          alert(
+            "This extension cannot be run on special browser pages or local files."
+          );
+        }
+      }
+    });
+  };
+
   const handleMicClick = async () => {
     if (!isRecording) {
       wsRef.current = new WebSocket(
@@ -60,15 +81,13 @@ const App: React.FC = () => {
           );
           // You can now handle specific errors
           if (error.name === "NotAllowedError") {
-            alert(
-              "Microphone permission was denied. Please allow microphone access in your browser settings."
-            );
+            requestMicPermission();
           } else if (error.name === "NotFoundError") {
             alert(
               "No microphone was found. Please ensure a microphone is connected and enabled."
             );
           } else {
-            alert(
+            console.error(
               `An error occurred while accessing the microphone: ${error.name}`
             );
           }
