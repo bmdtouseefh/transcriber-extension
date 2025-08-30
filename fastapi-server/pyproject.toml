@@ -8,4 +8,6 @@ dependencies = [
     "fastapi[standard]>=0.116.1",
     "faster-whisper>=1.2.0",
     "python-multipart>=0.0.20",
+    "scipy>=1.16.1",
+    "soundfile>=0.13.1",
 ]
